@@ -1,31 +1,58 @@
 package main
 
 import (
-	"fmt"
-	"github.com/sabrek15/Blog-Aggregator/internal/config"
+	"database/sql"
+	"log"
+	"os"
+
+	_ "github.com/lib/pq"
+	"github.com/sabrek15/gator/internal/config"
+	"github.com/sabrek15/gator/internal/database"
 )
 
+type state struct {
+	db *database.Queries
+	cfg *config.Config
+}
 
 func main() {
 	cfg, err := config.Read()
 	if err != nil {
-		fmt.Println("Error reading config: ", err)
-		return
+		log.Fatalf("error reading config: %v", err)
 	}
-	
-	err = cfg.SetUser("sabrek15")
+
+	db , err := sql.Open("postgres", cfg.DBURL)
 	if err != nil {
-		fmt.Println("error updating config: ", err)
+		log.Fatal("error connecting to db: %w", err)
+	}
+	defer db.Close()
+
+	dbQueries := database.New(db)
+
+	programState := &state{
+		db: dbQueries,
+		cfg: &cfg,
+	}
+
+	cmds := commands{
+		registeredCommands: make(map[string]func(*state, command) error),
+	}
+	cmds.register("register", handlerRegister)
+	cmds.register("login", handlerLogin)
+	cmds.register("reset", handlerRest)
+	cmds.register("users", handlerUsers)
+	cmds.register("agg", handlerAgg)
+
+	if len(os.Args) < 2 {
+		log.Fatal("Usage: cli <command> [args...]")
 		return
 	}
 
-	updatedCfg, err := config.Read()
-	if err != nil {
-		fmt.Println("Error reading config: ", err)
-		return
-	}
-	
-	// fmt.Print(updatedCfg.DBURL)
+	cmdName := os.Args[1]
+	cmdArgs := os.Args[2:]
 
-	fmt.Printf("updated config: %+v\n", updatedCfg)
+	err = cmds.run(programState, command{Name: cmdName, Args: cmdArgs})
+	if err != nil {
+		log.Fatal(err)
+	}
 }
