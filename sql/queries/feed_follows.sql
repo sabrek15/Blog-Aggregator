@@ -32,3 +32,7 @@ SELECT feed_follows.*,
     ) as feed_name
 FROM feed_follows
 WHERE feed_follows.user_id = $1;
+
+-- name: DeteleFeedFollow :exec
+DELETE FROM feed_follows
+WHERE feed_id = $1 AND user_id = $2;
