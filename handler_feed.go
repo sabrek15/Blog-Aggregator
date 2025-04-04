@@ -10,19 +10,13 @@ import (
 )
 
 
-func handlerAddfeed(s *state, cmd command) error {
+func handlerAddfeed(s *state, cmd command, user database.User) error {
 	if len(cmd.Args) != 2 {
 		return fmt.Errorf("usage: %v <feedname> <feedURL>", cmd.Name)
 	}
 
 	feedName := cmd.Args[0]
 	feedURL := cmd.Args[1]
-
-	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-
-	if err != nil {
-		return fmt.Errorf("couldn't find the user: %w", err)
-	}
 	
 	feed, err := s.db.CreateFeed(context.Background(), database.CreateFeedParams{
 		ID: uuid.New(),
@@ -78,7 +72,7 @@ func handlerFeeds(s *state, cmd command) error {
 	return nil
 }
 
-func handlerFollow(s *state, cmd command) error {
+func handlerFollow(s *state, cmd command, user database.User) error {
 	if len(cmd.Args) != 1 {
 		return fmt.Errorf("usage: %v <feedURL>", cmd.Name)
 	}
@@ -86,11 +80,6 @@ func handlerFollow(s *state, cmd command) error {
 	feed, err := s.db.GetFeedByUrl(context.Background(), feedURL)
 	if err != nil {
 		return fmt.Errorf("couldn't find the feed: %w",err)
-	}
-
-	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-	if err != nil {
-		return fmt.Errorf("couldn't find the current user: %w", err)
 	}
 
 	follow, err := s.db.CreateFeedFollow(context.Background(), database.CreateFeedFollowParams{
@@ -109,12 +98,7 @@ func handlerFollow(s *state, cmd command) error {
 	return nil
 }
 
-func hanlderFollowing(s *state, cmd command) error {
-	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-	if err != nil {
-		return fmt.Errorf("couldn't find the user: %w", err)
-	}
-
+func hanlderFollowing(s *state, cmd command, user database.User) error {
 	following, err := s.db.GetFeedFollowsForUser(context.Background(), user.ID)
 	if err != nil {
 		return fmt.Errorf("couldn't fetch the following feed of login user: %w", err)
@@ -124,6 +108,29 @@ func hanlderFollowing(s *state, cmd command) error {
 		PrintFeedFollowForUser(follow)
 		fmt.Println()
 	}
+	return nil
+}
+
+func handlerUnfollow(s *state, cmd command, user database.User) error {
+	if len(cmd.Args) != 1 {
+		return fmt.Errorf("usage: %s <feedURL>", cmd.Name)
+	}
+	
+	feedURL := cmd.Args[0]
+
+	feed, err := s.db.GetFeedByUrl(context.Background(), feedURL)
+	if err != nil {
+		return fmt.Errorf("couldn't find feed: %w", err)
+	}
+
+	err = s.db.DeteleFeedFollow(context.Background(), database.DeteleFeedFollowParams{UserID: user.ID, FeedID: feed.ID})
+
+	if err != nil {
+		return 	fmt.Errorf("couldn't unfollow the feed: %w", err)
+	}
+
+	fmt.Println("Feed Unfollowed successfully")
+
 	return nil
 }
 
