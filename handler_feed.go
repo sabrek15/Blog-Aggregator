@@ -134,6 +134,31 @@ func handlerUnfollow(s *state, cmd command, user database.User) error {
 	return nil
 }
 
+func scrapeFeeds(s *state) error {
+	feed, err := s.db.GetNextFeedToFetch(context.Background())
+	if err != nil {
+		return fmt.Errorf("couldn't fetch the next feed: %w", err)
+	}
+	_ , err = s.db.MarkFeedFetched(context.Background(), database.MarkFeedFetchedParams{
+		UpdatedAt: time.Now().UTC(),
+		ID: feed.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("couldn't update the feed: %w", err)
+	}
+
+	feeds, err := fetchFeed(context.Background(), feed.Url)
+	if err != nil {
+		return fmt.Errorf("couldn't find the feed: %w",err)
+	}
+
+	for _, feed := range feeds.Channel.Item {
+		fmt.Printf("* Title: 	%s\n", feed.Title)	
+	}
+
+	return nil
+}
+
 func printFeed(feed database.Feed){
 	fmt.Printf("* ID:            %s\n", feed.ID)
 	fmt.Printf("* Created:       %v\n", feed.CreatedAt)
