@@ -1,19 +1,25 @@
 package main
 
 import (
-	"context"
 	"fmt"
+	"time"
 )
 
 
 func handlerAgg(s *state, cmd command) error {
-	feedURL := "https://www.wagslane.dev/index.xml"
-
-	feed, err := fetchFeed(context.Background(), feedURL)
-	if err != nil {
-		return fmt.Errorf("failed to fetch feed: %w", err)
+	if len(cmd.Args) != 1 {
+		return fmt.Errorf("expected one command argument")
 	}
 
-	fmt.Printf("feed: %+v\n", feed)
-	return nil
+	timebetweenreqs, err := time.ParseDuration(cmd.Args[0])
+	if err != nil {
+		return fmt.Errorf("couldn't parse time duration: %w", err)
+	}
+
+	fmt.Printf("collecting feeds every: %s", timebetweenreqs)
+	ticker := time.NewTicker(timebetweenreqs)
+	for ; ; <- ticker.C {
+		scrapeFeeds(s)
+	}
+
 }
