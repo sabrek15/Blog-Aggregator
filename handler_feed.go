@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/sabrek15/gator/internal/database"
 )
 
@@ -135,25 +137,81 @@ func handlerUnfollow(s *state, cmd command, user database.User) error {
 }
 
 func scrapeFeeds(s *state) error {
-	feed, err := s.db.GetNextFeedToFetch(context.Background())
+	feedToFetch, err := s.db.GetNextFeedToFetch(context.Background())
 	if err != nil {
 		return fmt.Errorf("couldn't fetch the next feed: %w", err)
 	}
 	_ , err = s.db.MarkFeedFetched(context.Background(), database.MarkFeedFetchedParams{
 		UpdatedAt: time.Now().UTC(),
-		ID: feed.ID,
+		ID: feedToFetch.ID,
 	})
 	if err != nil {
 		return fmt.Errorf("couldn't update the feed: %w", err)
 	}
 
-	feeds, err := fetchFeed(context.Background(), feed.Url)
+	rssFeed, err := fetchFeed(context.Background(), feedToFetch.Url)
 	if err != nil {
 		return fmt.Errorf("couldn't find the feed: %w",err)
 	}
 
-	for _, feed := range feeds.Channel.Item {
-		fmt.Printf("* Title: 	%s\n", feed.Title)	
+	for _, feed := range rssFeed.Channel.Item {
+		parsedPubTime, err := time.Parse(time.RFC1123Z, feed.PubDate)
+		if err != nil {
+			fmt.Printf("couldn't parse publish time of post")
+			continue
+		}
+		_, err = s.db.CreatePost(context.Background(), database.CreatePostParams{
+			ID: uuid.New(),
+			UpdatedAt: time.Now().UTC(),
+			CreatedAt: time.Now().UTC(),
+			Title: feed.Title,
+			Url: feed.Link,
+			Description: feed.Description,
+			PublishedAt: parsedPubTime,
+			FeedID: feedToFetch.ID,
+		})
+
+		if err != nil {
+			if err, ok := err.(*pq.Error); ok && err.Code.Name() == "unique_violation" {
+				continue
+			}
+			fmt.Printf("an error while adding post to Database: %s", feed.Title)
+			continue
+		}
+	}
+
+	return nil
+}
+
+func hanlderBrowse(s *state, cmd command, user database.User) error {
+	limit := 2
+	if len(cmd.Args)==1 {
+		i, err := strconv.Atoi(cmd.Args[0])
+		if err != nil {
+			return fmt.Errorf("couldn't convert string to integer: %w", err)
+		}
+		limit = i
+	} else if len(cmd.Args) > 1 {
+		return fmt.Errorf("too many arguments: expected 1")
+	}
+
+	posts, err := s.db.GetUserPosts(context.Background(), database.GetUserPostsParams{
+		ID: user.ID,
+		Limit: int32(limit),
+	})
+
+	if err !=  nil {
+		return fmt.Errorf("couldn't get user posts: %w", err)
+	}
+	
+	fmt.Printf("Posts of user:\t%v\n", user.Name)
+	fmt.Println("--------------------------------")
+	for _, post := range posts {
+		fmt.Printf("Title:\t%v\n", post.Title)
+		fmt.Printf("Desc:\t%v\n", post.Description)
+		fmt.Printf("Feed:\t%v\n", post.FeedName)
+		fmt.Printf("----------------------------\n");
+		
 	}
 
 	return nil
