@@ -73,6 +73,8 @@ There are a few other commands you'll need as well:
 
 - `gator unfollow <url>` - Unfollow a feed that already exists in the database
 
+- `gator reset` - resets the database.
+
 ## Notes
 - Ensure Postgres is running locally before using the CLI.
 
